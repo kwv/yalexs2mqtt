@@ -1,11 +1,36 @@
 # yalexs2mqtt
-BLE to MQTT Bridge for yale (August) locks.
+BLE to MQTT Bridge for Yale (/August) locks.
 
-Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT),  [yalexs-ble](https://github.com/bdraco/yalexs-ble) and [bluetooth in docker](https://medium.com/omi-uulm/how-to-run-containerized-bluetooth-applications-with-bluez-dced9ab767f6)
+Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT), this project uses [yalexs-ble](https://github.com/bdraco/yalexs-ble) to bridge messages to MQTT.   
+
+## Things to know:
+- The bridge will listen for MQTT topic `yalexs/{SERIAL}/set` to wait for `LOCK`, `UNLOCK`, `UPDATE` commands.  
+- The bridge will publish to MQTT topic `yalexs/{SERIAL}/state`, when the lock reports a state change.
+- for a complete set of values refer to the upstream [const.py](https://github.com/bdraco/yalexs-ble/blob/main/src/yalexs_ble/const.py)
+
+```json
+{
+    "state": {
+        "lock": "LOCKED",
+        "door": "CLOSED",
+        "battery": {
+            "voltage": 5.298,
+            "percentage": 30
+        },
+        "auth": {
+            "successful": true
+        }
+    },
+    "connection_info": {
+        "rssi": -72
+    },
+    "last_updated": "2025-01-19T22:24:03.835916"
+}
+```
 
 
 ## Getting Started
-1. Clone the repo, and start by modifying `config.example.json` file with the info for your lock as `config.json`. Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) to find the `handshakeKey` and `handshakeKeyIndex`. 
+1.  Prepare a `config.json` (an example  `config.example.json` is in this repository).  Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) to find the `handshakeKey` and `handshakeKeyIndex`. 
 
 ```
 	"lock": [
@@ -27,25 +52,11 @@ Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT),
     },
 ```
 
-## Running in docker
+3. Running in docker
 `docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/config  kwv4/yalexs2mqtt:latest`
 
 
-## Building it locally
 
-Building locally the docker image `docker build -t yalexs2mqtt .` and run it `docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/config  yalexs2mqtt`.  If building cross platform (i.e. building on amd64, running on arm64 like a Raspberry Pi) follow 
- [multi-platform](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually)
-
-
-Things to know:
-- The bridge will listen for MQTT topic `yalexs/{SERIAL}/set` to wait for `LOCK`, `UNLOCK`, `UPDATE` commands.  
-- The bridge will publish to MQTT topic `yalexs/{SERIAL}/state`, when the lock reports a state change.
-
-
-```json
-{"state": {"lock": "LOCKED", "door": "CLOSED", "battery": {"voltage": 5.298, "percentage": 30}, "auth": {"successful": true}}, "connection_info": {"rssi": -72}, "last_updated": "2025-01-19T22:24:03.835916"}
-```
-https://github.com/bdraco/yalexs-ble/blob/main/src/yalexs_ble/const.py
 
 
 ### Troubleshooting
@@ -71,3 +82,15 @@ yalexs2mqtt-1  |     raise self._exception(self._message) from exc_val
 yalexs2mqtt-1  | yalexs_ble.session.DisconnectedError: 0A:1B:2C:3D:4E:5F: Disconnected
 yalexs2mqtt-1  | 2025-01-19 21:34:52 CRITICAL An error occurred: 0A:1B:2C:3D:4E:5F: Disconnected
 ```
+
+### Building it locally
+
+Building locally the docker image `docker build -t yalexs2mqtt .` and run it `docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/config  yalexs2mqtt`.  If building cross platform (i.e. building on amd64, running on arm64 like a Raspberry Pi) follow 
+ [multi-platform](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually)
+
+
+ #### Thanks
+Thanks to [aeozyalcin](https://github.com/aeozyalcin) for the inspiration of this spirtual fork of his [August2MQTT](https://github.com/aeozyalcin/August2MQTT) and a very helpful article    [bluetooth in docker](https://medium.com/omi-uulm/how-to-run-containerized-bluetooth-applications-with-bluez-dced9ab767f6) 
+
+
+PRs welcome
