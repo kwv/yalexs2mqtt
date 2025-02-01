@@ -1,27 +1,30 @@
 # Use a minimal base image
-FROM python:3.9-alpine AS base-image
+FROM python:3.9-slim AS base-image
 
 # Combine RUN instructions to reduce layers
-RUN apk update && \
-    apk add --no-cache bluez bluetooth sudo && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends bluez bluetooth sudo python3-venv && \
     python3 -m venv /venv && \
-    adduser -D bluezuser && \
-    adduser bluezuser wheel && \
-    passwd -u bluezuser && \
-    rm -rf /var/cache/apk/*
+    adduser --disabled-password --gecos "" bluezuser && \
+    adduser bluezuser sudo && \
+    passwd -d bluezuser && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Build stage with build dependencies
 FROM base-image AS build-image
-RUN apk update && \
-    apk add --no-cache build-base libbluetooth-dev && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential libbluetooth-dev && \
     /venv/bin/pip install --no-cache-dir yalexs-ble paho-mqtt && \
-    rm -rf /var/cache/apk/*
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Runtime stage with runtime dependencies only
 FROM base-image AS runtime-image
-RUN apk update && \
-    apk add --no-cache dbus && \
-    rm -rf /var/cache/apk/* && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends dbus && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
     mkdir /app && \
     chown -R bluezuser:bluezuser /app
 

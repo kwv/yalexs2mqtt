@@ -2,25 +2,35 @@ import sys
 import paho.mqtt.client as mqtt
 import asyncio
 import logging
-
 from bleak import BleakScanner
-
 from yalexs_ble import LockState, PushLock
 from yalexs_ble.const import ConnectionInfo, LockInfo
 import json
 from enum import Enum
 from datetime import datetime
+from typing import Any, Dict
+
+# Constants for configuration keys
+CONFIG_LOCK = "lock"
+CONFIG_MQTT = "mqtt"
+LOCK_SERIAL_KEY = "serial"
+LOCK_ADDRESS_KEY = "bluetoothAddress"
+LOCK_KEY_KEY = "handshakeKey"
+LOCK_KEY_INDEX_KEY = "handshakeKeyIndex"
+MQTT_USER_KEY = "mqtt_user"
+MQTT_PASSWORD_KEY = "mqtt_password"
+MQTT_BROKER_ADDRESS_KEY = "broker_address"
 
 # Load configuration from JSON file
-config = None
+config: Dict[str, Any] = None
 with open("config/config.json", "r") as config_file:
     config = json.load(config_file)
 
 # Extract lock configuration
-LOCK_SERIAL = config["lock"]["serial"]
-LOCK_ADDRESS = config["lock"]["bluetoothAddress"]
-LOCK_KEY = config["lock"]["handshakeKey"]
-LOCK_KEY_INDEX = config["lock"]["handshakeKeyIndex"]
+LOCK_SERIAL: str = config[CONFIG_LOCK][LOCK_SERIAL_KEY]
+LOCK_ADDRESS: str = config[CONFIG_LOCK][LOCK_ADDRESS_KEY]
+LOCK_KEY: str = config[CONFIG_LOCK][LOCK_KEY_KEY]
+LOCK_KEY_INDEX: int = config[CONFIG_LOCK][LOCK_KEY_INDEX_KEY]
 
 assert isinstance(LOCK_SERIAL, str)  # nosec
 assert isinstance(LOCK_ADDRESS, str)  # nosec
@@ -38,21 +48,22 @@ logging.getLogger("yalexs_ble").setLevel(logging.INFO)
 logging.getLogger("bleak_retry_connector").setLevel(logging.INFO)
 
 # Custom asdict factory to convert Enum values to their string representation
-def custom_asdict_factory(data):
-    def convert_value(obj):
+def custom_asdict_factory(data: Any) -> Dict[str, Any]:
+    def convert_value(obj: Any) -> Any:
         if isinstance(obj, Enum):
             return obj.name
         return obj   
     return {k: convert_value(v) for k, v in data.__dict__.items()}
 
 # Initialize event for new MQTT commands
-mqtt_command_event = asyncio.Event()
-mqtt_message = None  # Initialize mqtt_message to None
+mqtt_command_event: asyncio.Event = asyncio.Event()
+mqtt_message: str = None  # Initialize mqtt_message to None
 
-def onStatusUpdate(status: json):
-        client.publish(f"yalexs/{LOCK_SERIAL}/currentValue", status, retain=True)
-        _LOGGER.info(status)
-def on_message(client, userdata, message):
+def onStatusUpdate(status: str) -> None:
+    client.publish(f"yalexs/{LOCK_SERIAL}/currentValue", status, retain=True)
+    _LOGGER.info(status)
+
+def on_message(client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) -> None:
     global mqtt_message
     try:
         _LOGGER.info(f"New MQTT message received: {message.payload.decode()}")
@@ -60,7 +71,8 @@ def on_message(client, userdata, message):
         mqtt_command_event.set()
     except Exception as e:
         _LOGGER.error(f"Error processing MQTT message: {e}")
-def on_mqtt_client_connect(client, userdata, flags, reason_code, properties):
+
+def on_mqtt_client_connect(client: mqtt.Client, userdata: Any, flags: Dict[str, Any], reason_code: int, properties: Any) -> None:
     if reason_code == 0:
         client.subscribe(f"yalexs/{LOCK_SERIAL}/set")
     else:
@@ -68,9 +80,9 @@ def on_mqtt_client_connect(client, userdata, flags, reason_code, properties):
         sys.exit(1)
 
 # Set up MQTT client
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2) 
-client.username_pw_set(config["mqtt"]["mqtt_user"],config["mqtt"]["mqtt_password"])
-client.connect_async(config["mqtt"]["broker_address"])
+client: mqtt.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.username_pw_set(config[CONFIG_MQTT][MQTT_USER_KEY], config[CONFIG_MQTT][MQTT_PASSWORD_KEY])
+client.connect_async(config[CONFIG_MQTT][MQTT_BROKER_ADDRESS_KEY])
 
 client.publish("yalexs/bridge/availability", "online", retain=True)
 
@@ -78,9 +90,7 @@ client.on_message = on_message
 client.on_connect = on_mqtt_client_connect
 client.loop_start()
 
-
-async def run():
-
+async def run() -> None:
     push_lock = PushLock(
         local_name=LOCK_SERIAL, address=LOCK_ADDRESS, key=LOCK_KEY, key_index=LOCK_KEY_INDEX
     )
@@ -90,11 +100,9 @@ async def run():
         new_state: LockState, lock_info: LockInfo, connection_info: ConnectionInfo
     ) -> None:
         state_json = json.dumps(new_state, default=custom_asdict_factory)
-       # lock_json = json.dumps(lock_info, default=custom_asdict_factory)
         connection_json = json.dumps(connection_info, default=custom_asdict_factory)
         merged_json = json.dumps({
             "state": json.loads(state_json),
-            # "lock_info": json.loads(lock_json),
             "connection_info": json.loads(connection_json),
             "last_updated": datetime.today().isoformat()
         })
@@ -143,8 +151,6 @@ async def run():
         await scanner.stop()
         _LOGGER.info("Cleanly exited.")
         sys.exit(1)
-
-
 
 # Run the main function
 asyncio.run(run())
