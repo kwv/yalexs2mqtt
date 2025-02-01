@@ -3,24 +3,24 @@ FROM python:3.9-alpine AS base-image
 
 # Combine RUN instructions to reduce layers
 RUN apk update && \
-    apk add --no-cache bluez bluetooth && \
+    apk add --no-cache bluez bluetooth sudo && \
     python3 -m venv /venv && \
-    useradd -m bluezuser && \
-    adduser bluezuser sudo && \
-    passwd -d bluezuser && \
+    adduser -D bluezuser && \
+    adduser bluezuser wheel && \
+    passwd -u bluezuser && \
     rm -rf /var/cache/apk/*
 
 # Build stage with build dependencies
 FROM base-image AS build-image
 RUN apk update && \
-    apk add --no-cache build-essential libbluetooth-dev && \
-    /venv/bin/pip install yalexs-ble paho-mqtt && \
+    apk add --no-cache build-base libbluetooth-dev && \
+    /venv/bin/pip install --no-cache-dir yalexs-ble paho-mqtt && \
     rm -rf /var/cache/apk/*
 
 # Runtime stage with runtime dependencies only
 FROM base-image AS runtime-image
 RUN apk update && \
-    apk add --no-cache dbus sudo && \
+    apk add --no-cache dbus && \
     rm -rf /var/cache/apk/* && \
     mkdir /app && \
     chown -R bluezuser:bluezuser /app
