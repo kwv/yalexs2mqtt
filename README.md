@@ -1,7 +1,9 @@
 # yalexs2mqtt
 BLE to MQTT Bridge for Yale (/August) locks.
 
-Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT), this project uses [yalexs-ble](https://github.com/bdraco/yalexs-ble) to bridge messages to MQTT.   
+Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT), this project uses [yalexs-ble](https://github.com/bdraco/yalexs-ble) to bridge messages to MQTT.   Multi-architecutre  (`linux/arm64` or `linux/amd64`) are available on [dockerhub](https://hub.docker.com/repository/docker/kwv4/yalexs2mqtt/general).   
+
+Tested on a Raspberry Pi Zero 2 W and August Smart Lock Pro (Gen 3) ASL-03.
 
 ## Things to know:
 - The bridge will listen for MQTT topic `yalexs/{SERIAL}/set` to wait for `LOCK`, `UNLOCK`, `UPDATE` commands.  
@@ -30,7 +32,7 @@ Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT),
 
 
 ## Getting Started
-1.  Prepare a `config.json` (an example  `config.example.json` is in this repository).  Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) to find the `handshakeKey` and `handshakeKeyIndex`. 
+1.  Prepare a `config.json`. An example [config.example.json](./config/config.example.json) is in this repository.  Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) to find the `handshakeKey` and `handshakeKeyIndex`. 
 
 ```
 	"lock": [
@@ -52,12 +54,13 @@ Inspired by [aeozyalcin/August2MQTT](https://github.com/aeozyalcin/August2MQTT),
     },
 ```
 
-3. Running in docker
-`docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/config  kwv4/yalexs2mqtt:latest`
+### Running yalexs2mqtt
+#### Running with docker compose
+Modify [docker-compose.yml](./docker-compose.yml) to set the appropriate  architecture (`linux/arm64` or `linux/amd64` are available on [dockerhub](https://hub.docker.com/repository/docker/kwv4/yalexs2mqtt/general)) and ensure the path to the configuration file is correct.    
+    
 
-
-
-
+#### Running in docker
+`docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/app/config  kwv4/yalexs2mqtt:latest`
 
 ### Troubleshooting
 
@@ -85,7 +88,7 @@ yalexs2mqtt-1  | 2025-01-19 21:34:52 CRITICAL An error occurred: 0A:1B:2C:3D:4E:
 
 ### Building it locally
 
-Building locally the docker image `docker build -t yalexs2mqtt .` and run it `docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/config  yalexs2mqtt`.  If building cross platform (i.e. building on amd64, running on arm64 like a Raspberry Pi) follow 
+Building locally the docker image `docker build -t yalexs2mqtt .` and run it `docker run -it  --net=host --cap-add=NET_ADMIN -v ${PWD}/config:/app/config  yalexs2mqtt`.  If building cross platform (i.e. building on amd64, running on arm64 like a Raspberry Pi) follow 
  [multi-platform](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually)
 
 
