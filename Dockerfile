@@ -3,7 +3,7 @@ FROM python:3.9-slim AS base-image
 
 # Combine RUN instructions to reduce layers
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bluez bluetooth sudo python3-venv && \
+    apt-get install -y --no-install-recommends bluez sudo python3-venv && \
     python3 -m venv /venv && \
     adduser --disabled-password --gecos "" bluezuser && \
     adduser bluezuser sudo && \
@@ -28,20 +28,22 @@ RUN apt-get update && \
     mkdir /app && \
     chown -R bluezuser:bluezuser /app
 
-# Switch to the non-root user
-USER bluezuser
 
 # Set the working directory
 WORKDIR /app
 
+# Set the execute permission for entrypoint.sh
+COPY ./entrypoint.sh .
+RUN chmod +x /app/entrypoint.sh
+
+# Switch to the non-root user
+USER bluezuser
 # Copy the virtual environment and application files
 COPY --from=build-image /venv /venv
 COPY ./config/ /app/config/
-COPY ./entrypoint.sh .
+
 COPY ./yalexs2mqtt.py /app/
 
-# Set the execute permission for entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # Use entrypoint to run the script
 ENTRYPOINT ["/app/entrypoint.sh"]
