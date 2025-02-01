@@ -1,0 +1,13 @@
+{
+    "mqtt": {
+        "broker_address": "192.168.0.192",
+        "mqtt_user": "august",
+        "mqtt_password": "lock"
+    },
+    "lock": {
+        "serial": "ASDFGH1234",
+        "bluetoothAddress": "0A:1B:2C:3D:4E:5F",
+        "handshakeKey": "ABCDEF0123456789ABCDEF0123456789",
+        "handshakeKeyIndex": 1
+    }
+}

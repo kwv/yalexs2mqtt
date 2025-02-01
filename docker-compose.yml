@@ -1,0 +1,17 @@
+# Example docker compose config.
+
+services:
+  yalexs2mqtt:
+    image: kwv4/yalexs2mqtt:latest
+    network_mode: host
+    restart: on-failure
+    platform: linux/arm64
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /run/dbus:/run/dbus:ro
+      - /home/pi/yalexs2mqtt/config:/config
+    environment:
+      - PUID=99
+      - PGID=100
+      - TZ=America/Chicago
