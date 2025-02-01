@@ -1,29 +1,36 @@
 # Use an official Python runtime as a parent image
 FROM python:3-slim AS base-image
-RUN apt-get update
-RUN apt-get install -y --no-install-recommends bluez bluetooth  
-RUN python3 -m venv /venv
-RUN useradd -m bluezuser \
- && adduser bluezuser sudo \
- && passwd -d bluezuser
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends bluez bluetooth sudo && \
+    python3 -m venv /venv && \
+    #     adduser --disabled-password --gecos "" bluezuser && \
+    useradd -m bluezuser && \
+    adduser bluezuser sudo && \
+    passwd -d bluezuser  && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 
+# Build stage with build dependencies
 FROM base-image AS build-image
-# keep the build dependencies in a build specific image
-RUN apt-get install -y --no-install-recommends build-essential libbluetooth-dev 
 WORKDIR /app
-RUN /venv/bin/pip install yalexs-ble paho-mqtt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential libbluetooth-dev && \
+    /venv/bin/pip install --no-cache-dir yalexs-ble paho-mqtt && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 
 FROM base-image AS runtime-image
+WORKDIR /app
 # setup bluetooth permissions
 COPY ./bluezuser.conf /etc/dbus-1/system.d/
-RUN apt-get install -y --no-install-recommends dbus sudo
-
-WORKDIR /app
-# Set the execute permission for entrypoint.sh
-COPY ./entrypoint.sh .
-RUN chmod +x ./entrypoint.sh
+ 
+COPY ./entrypoint.sh . 
+RUN apt-get install -y --no-install-recommends dbus && \
+    chmod +x ./entrypoint.sh && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 
 USER bluezuser
