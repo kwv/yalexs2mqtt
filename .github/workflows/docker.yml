@@ -40,6 +40,6 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: kvandesteeg/yalexs2mqtt:latest
+          tags: kwv4/yalexs2mqtt:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
