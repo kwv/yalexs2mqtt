@@ -28,5 +28,6 @@ COPY --from=build-image /venv /venv
 COPY ./config/ /app/config/
 COPY ./entrypoint.sh .
 COPY ./yalexs2mqtt.py /app/
+RUN chmod +x ./entrypoint.sh
 
 CMD ["./entrypoint.sh"]
