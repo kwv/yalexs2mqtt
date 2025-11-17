@@ -1,5 +1,10 @@
 # Use an official Python runtime as a parent image
 FROM python:3-slim AS base-image
+LABEL maintainer="kwv4"
+LABEL version="1.0"
+LABEL description="A bluetooth bridge to MQTT for yale locks."
+LABEL repository="https://github.com/kwv/yalexs2mqtt"
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends bluez bluetooth sudo && \
     python3 -m venv /venv && \
