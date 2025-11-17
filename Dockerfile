@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM --platform=$TARGETPLATFORM python:3-slim AS base-image
+FROM python:3-slim AS base-image
 RUN apt-get update && \
     apt-get install -y --no-install-recommends bluez bluetooth sudo && \
     python3 -m venv /venv && \
@@ -13,12 +13,18 @@ RUN apt-get update && \
 # Build stage with build dependencies
 FROM base-image AS build-image
 WORKDIR /app
+
+# Install system build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential libbluetooth-dev && \
     /venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /venv/bin/pip install --no-cache-dir yalexs-ble paho-mqtt && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file and install Python dependencies
+COPY ./requirements.txt /app/requirements.txt
+RUN /venv/bin/pip install --no-cache-dir -r /app/requirements.txt
+
 
 # Runtime stage
 FROM base-image AS runtime-image
@@ -42,7 +48,6 @@ COPY --from=build-image /venv /venv
 
 # Copy application files
 COPY ./config/ /app/config/
-
 COPY ./yalexs2mqtt.py /app/
 
 CMD ["./entrypoint.sh"]
