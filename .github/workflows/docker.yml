@@ -12,6 +12,7 @@ jobs:
 
     env:
       IMAGE_NAME: yalexs2mqtt
+      DOCKERHUB_USER: kwv4
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
