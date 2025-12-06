@@ -29,10 +29,10 @@ WORKDIR /app
 
 # Install runtime dependencies
 # bluez: for bluetooth stack
+# bluez-deprecated: for hciconfig
 # dbus: for inter-process communication
 # sudo: for privilege escalation (if needed)
-# libcap: for setcap (optional, but good for non-root)
-RUN apk add --no-cache bluez dbus sudo
+RUN apk add --no-cache bluez bluez-deprecated dbus sudo
 
 # Setup Bluetooth permissions (copy config)
 COPY ./bluezuser.conf /etc/dbus-1/system.d/

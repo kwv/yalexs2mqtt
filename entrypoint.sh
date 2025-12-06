@@ -1,23 +1,36 @@
-#!/bin/bash
-# start services
-sudo service dbus start
-sudo service bluetooth start
-# reset bluetooth adapter by restarting it
-sudo hciconfig hci0 down
-sudo hciconfig hci0 up
-hciconfig
-# wait for startup of services
-msg="Waiting for services to start..."
-time=0
-echo -n $msg
-while [[ "$(pidof start-stop-daemon)" != "" ]]; do
-    sleep 1
-    time=$((time + 1))
-    echo -en "\r$msg $time s"
-done
-echo -e "\r$msg done! (in $time s)"
+#!/bin/sh
+set -e
 
+# Start dbus
+mkdir -p /var/run/dbus
+dbus-daemon --system --fork
+echo "Started dbus"
 
+# Start bluetoothd
+# Try to find bluetoothd path
+if [ -x /usr/libexec/bluetooth/bluetoothd ]; then
+    /usr/libexec/bluetooth/bluetoothd &
+elif [ -x /usr/lib/bluetooth/bluetoothd ]; then
+    /usr/lib/bluetooth/bluetoothd &
+else
+    echo "Could not find bluetoothd executable"
+    exit 1
+fi
+echo "Started bluetoothd"
 
-# start application
-/venv/bin/python3 /app/yalexs2mqtt.py
+# Wait for services to settle
+sleep 2
+
+# Reset bluetooth adapter if hciconfig is available
+if command -v hciconfig >/dev/null; then
+    echo "Resetting hci0..."
+    hciconfig hci0 down
+    hciconfig hci0 up
+    hciconfig
+else
+    echo "hciconfig not found, skipping adapter reset"
+fi
+
+# Start application
+echo "Starting yalexs2mqtt..."
+exec /venv/bin/python3 /app/yalexs2mqtt.py
