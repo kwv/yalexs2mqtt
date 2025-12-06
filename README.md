@@ -32,7 +32,7 @@ Tested on a Raspberry Pi Zero 2 W and August Smart Lock Pro (Gen 3) ASL-03.
 
 
 ## Getting Started
-1.  Prepare a `config.json`. An example [config.example.json](./config/config.example.json) is in this repository.  Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) to find the `handshakeKey` and `handshakeKeyIndex`. 
+1.  Prepare a `config.json`. An example [config.example.json](./config/config.example.json) is in this repository.  Follow the instructions [here](https://github.com/Friendly0Fire/augustpy#putting-it-all-together) or [here](https://github.com/JamesSmartCell/AugustLockCredentials) to find the `handshakeKey` and `handshakeKeyIndex`. 
 
 ```
 	"lock": [
