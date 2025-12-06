@@ -1,58 +1,58 @@
-# Use an official Python runtime as a parent image
-FROM python:3-slim AS base-image
+# Build stage
+FROM python:3-alpine AS build-image
+
+WORKDIR /app
+
+# Install build dependencies
+# build-base: for compiling C extensions (gcc, musl-dev, etc.)
+# bluez-dev: for bluetooth headers (if needed by bleak/dependencies)
+# linux-headers: for kernel headers
+RUN apk add --no-cache build-base bluez-dev linux-headers
+
+# Create venv
+RUN python3 -m venv /venv
+
+# Install dependencies
+COPY requirements.txt .
+RUN /venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Runtime stage
+FROM python:3-alpine AS runtime-image
+
 LABEL maintainer="kwv4"
 LABEL version="1.0"
 LABEL description="A bluetooth bridge to MQTT for yale locks."
 LABEL repository="https://github.com/kwv/yalexs2mqtt"
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends bluez bluetooth sudo && \
-    python3 -m venv /venv && \
-    useradd -m bluezuser && \
-    adduser bluezuser sudo && \
-    passwd -d bluezuser && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-
-# Build stage with build dependencies
-FROM base-image AS build-image
 WORKDIR /app
 
-# Install system build dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential libbluetooth-dev && \
-    /venv/bin/pip install --no-cache-dir --upgrade pip && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies
+# bluez: for bluetooth stack
+# dbus: for inter-process communication
+# sudo: for privilege escalation (if needed)
+# libcap: for setcap (optional, but good for non-root)
+RUN apk add --no-cache bluez dbus sudo
 
-# Copy requirements file and install Python dependencies
-COPY ./requirements.txt /app/requirements.txt
-RUN /venv/bin/pip install --no-cache-dir -r /app/requirements.txt
-
-
-# Runtime stage
-FROM base-image AS runtime-image
-WORKDIR /app
-
-# Setup Bluetooth permissions
+# Setup Bluetooth permissions (copy config)
 COPY ./bluezuser.conf /etc/dbus-1/system.d/
 
-# Copy entrypoint script and set permissions
+# Copy entrypoint
 COPY ./entrypoint.sh .
-RUN apt-get install -y --no-install-recommends dbus && \
-    chmod +x ./entrypoint.sh && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN chmod +x ./entrypoint.sh
 
-# Switch to non-root user
-USER bluezuser
+# Create user
+RUN adduser -D bluezuser && \
+    echo "bluezuser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/bluezuser
 
-# Copy virtual environment from build stage
+# Copy venv from builder
 COPY --from=build-image /venv /venv
 
 # Copy application files
 COPY ./config/ /app/config/
 COPY ./yalexs2mqtt.py /app/
+
+# Switch to user
+USER bluezuser
 
 CMD ["./entrypoint.sh"]
