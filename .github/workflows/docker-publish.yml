@@ -88,6 +88,8 @@ jobs:
           push: true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+          build-args: |
+            VERSION=${{ steps.extract.outputs.version }}
           tags: |
             ${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}:${{ steps.extract.outputs.version }}
             ${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}:latest

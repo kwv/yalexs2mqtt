@@ -21,7 +21,8 @@ RUN /venv/bin/pip install --no-cache-dir --upgrade pip && \
 FROM python:3-alpine AS runtime-image
 
 LABEL maintainer="kwv4"
-LABEL version="1.0"
+ARG VERSION=local
+LABEL version="$VERSION"
 LABEL description="A bluetooth bridge to MQTT for yale locks."
 LABEL repository="https://github.com/kwv/yalexs2mqtt"
 
