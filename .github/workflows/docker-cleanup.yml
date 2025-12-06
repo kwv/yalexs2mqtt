@@ -1,0 +1,117 @@
+name: Docker Hub Cleanup
+
+on:
+  schedule:
+    - cron: "0 4 * * 0"  # every Sunday at 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      # Update these defaults if you want; they can also be passed via env below
+      NAMESPACE: kwv4
+      REPO: yalexs2mqtt
+      KEEP_RECENT: '5'
+      OLDER_THAN_DAYS: '30'
+      PROTECTED_REGEX: '^(latest|stable|dev)$'
+      DRY_RUN: 'true'   # change to 'false' to perform deletions
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Docker Hub cleanup (inline script, dry-run by default)
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          REPO: ${{ env.REPO }}
+          KEEP_RECENT: ${{ env.KEEP_RECENT }}
+          OLDER_THAN_DAYS: ${{ env.OLDER_THAN_DAYS }}
+          PROTECTED_REGEX: ${{ env.PROTECTED_REGEX }}
+          DRY_RUN: ${{ env.DRY_RUN }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
+            echo "Please set DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD secrets."
+            exit 2
+          fi
+
+          echo "Logging in to Docker Hub API as ${DOCKERHUB_USERNAME}..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d "{\"username\":\"${DOCKERHUB_USERNAME}\",\"password\":\"${DOCKERHUB_PASSWORD}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to obtain Docker Hub token"
+            exit 1
+          fi
+
+          echo "Fetching tags for ${NAMESPACE}/${REPO} (paginated)..."
+          all_tags_json="[]"
+          page=1
+          page_size=100
+          while true; do
+            resp=$(curl -s -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/${NAMESPACE}/${REPO}/tags?page=${page}&page_size=${page_size}")
+            page_results=$(echo "$resp" | jq '.results')
+            all_tags_json=$(jq -s 'add' <(echo "$all_tags_json") <(echo "$page_results"))
+            next=$(echo "$resp" | jq -r '.next')
+            if [ "$next" = "null" ] || [ -z "$next" ]; then
+              break
+            fi
+            page=$((page+1))
+          done
+
+          candidates=$(echo "$all_tags_json" \
+            | jq -r --arg PROT "$PROTECTED_REGEX" '
+                .[] |
+                {name:.name, last_updated:.last_updated} |
+                select((.name | test($PROT) | not))
+              ' \
+            | jq -s 'sort_by(.last_updated) | reverse')
+
+          total=$(echo "$candidates" | jq 'length')
+          echo "Found $total non-protected tags in ${NAMESPACE}/${REPO}"
+
+          cutoff_date=$(date -Iseconds -d "${OLDER_THAN_DAYS} days ago")
+
+          to_delete=$(echo "$candidates" | jq --argjson keep "$KEEP_RECENT" --arg cutoff "$cutoff_date" '
+            to_entries |
+            map(select((.key >= $keep) or (.value.last_updated < $cutoff))) |
+            .[].value.name
+          ')
+
+          if [ -z "$to_delete" ] || [ "$to_delete" = "null" ]; then
+            echo "No tags to delete. Exiting."
+            exit 0
+          fi
+
+          echo "Tags to delete (preview):"
+          echo "$to_delete"
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "Dry run enabled; set DRY_RUN=false in the workflow env to actually delete tags."
+            exit 0
+          fi
+
+          echo "$to_delete" | while read -r tag; do
+            if [ -z "$tag" ]; then continue; fi
+            echo "Deleting tag: $tag"
+            resp_code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/${NAMESPACE}/${REPO}/tags/${tag}/")
+            if [ "$resp_code" -eq 204 ] || [ "$resp_code" -eq 200 ]; then
+              echo "Deleted $tag"
+            else
+              echo "Failed to delete $tag (HTTP $resp_code)"
+            fi
+          done
+
+          echo "Done. Note: Docker Hub may reclaim storage asynchronously after tag deletions."
