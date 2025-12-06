@@ -16,34 +16,43 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # Fetch tags to ensure 'git describe' or manual tag parsing works reliably
         with:
           fetch-depth: 0
+
+      # 1. Test Stage
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies and run tests
+        run: |
+          python -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+          ./venv/bin/pip install pytest pytest-asyncio
+          ./venv/bin/pytest
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
 
-      # 2. Tag Extraction and Pre-Push Checks (Matches 'make check-version' and 'make check-tag')
+      # 2. Tag Extraction and Pre-Push Checks
       - name: Extract version from tag
         id: extract
         run: |
-          # Use GITHUB_REF_NAME which is cleaner than extracting from GITHUB_REF
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION is $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check if tag already exists on Docker Hub (Requires jq)
+      - name: Check if tag already exists on Docker Hub
         id: check-tag
         run: |
-          # FIX: Install jq which is required for the curl/json parsing check, matching the Makefile's logic
           sudo apt-get update && sudo apt-get install -y jq
           
           VERSION="${{ steps.extract.outputs.version }}"
           IMAGE="${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}"
           
-          # This logic directly mirrors your 'make check-tag' target
           TAG_EXISTS=$(curl -s https://hub.docker.com/v2/repositories/$IMAGE/tags/$VERSION/ | jq -r '.name // empty')
           
           if [ "$TAG_EXISTS" = "$VERSION" ]; then
@@ -77,10 +86,6 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          # Pass VERSION as a build-arg, although not strictly needed for your current Dockerfile
-          # This is useful if you want to embed version info in the Go binary
-          # build-args: |
-          #   VERSION=${{ steps.extract.outputs.version }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
           tags: |
