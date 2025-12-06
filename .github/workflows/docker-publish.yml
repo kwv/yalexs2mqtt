@@ -6,6 +6,9 @@ on:
       # Trigger only when a new tag like v1.0.0 is pushed
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
