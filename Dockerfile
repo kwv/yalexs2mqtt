@@ -55,5 +55,5 @@ COPY ./yalexs2mqtt.py /app/
 
 # Switch to user
 USER bluezuser
-
+EXPOSE 8080
 CMD ["./entrypoint.sh"]
