@@ -1,6 +1,8 @@
 import sys
 import asyncio
 import logging
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from dataclasses import dataclass
 from enum import Enum
@@ -165,7 +167,10 @@ class Yalexs2MqttBridge:
                 "Connected - Keys are good: %s",
                 self.push_lock.is_connected,
             )
-
+            # Start HTTP server in a separate thread
+            http_thread = threading.Thread(target=run_http_server)
+            http_thread.daemon = True  # So it exits when the main thread exits
+            http_thread.start()
             while True:
                 done, pending = await asyncio.wait(
                     [asyncio.create_task(self.mqtt_command_event.wait())],
@@ -197,6 +202,22 @@ class Yalexs2MqttBridge:
             if self.scanner:
                 await self.scanner.stop()
             _LOGGER.info("Cleanly exited.")
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "healthy"}).encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_http_server():
+    server_address = ('', 8080)
+    httpd = HTTPServer(server_address, HealthCheckHandler)
+    httpd.serve_forever()
 
 if __name__ == "__main__":
     bridge = Yalexs2MqttBridge()
