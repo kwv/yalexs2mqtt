@@ -2,12 +2,13 @@ name: Build and Push Docker Image
 
 on:
   push:
+    branches: [ main ]
     tags:
-      # Trigger only when a new tag like v1.0.0 is pushed
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-push:
@@ -22,77 +23,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. Test Stage
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install dependencies and run tests
+      - name: Install dependencies
         run: |
           python -m venv venv
           ./venv/bin/pip install -r requirements.txt
-          ./venv/bin/pip install pytest pytest-asyncio
-          ./venv/bin/pytest
+          ./venv/bin/pip install pytest pytest-asyncio flake8
+
+      - name: Run lint
+        run: ./venv/bin/flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run tests
+        run: ./venv/bin/pytest
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
 
-      # 2. Tag Extraction and Pre-Push Checks
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Extract version from tag
         id: extract
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION is $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check if tag already exists on Docker Hub
-        id: check-tag
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          
-          VERSION="${{ steps.extract.outputs.version }}"
-          IMAGE="${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}"
-          
-          TAG_EXISTS=$(curl -s https://hub.docker.com/v2/repositories/$IMAGE/tags/$VERSION/ | jq -r '.name // empty')
-          
-          if [ "$TAG_EXISTS" = "$VERSION" ]; then
-            echo "::error file=release.yml::Tag ${{ steps.extract.outputs.version }} already exists on Docker Hub. Aborting release."
-            exit 1
-          else
-            echo "Tag ${{ steps.extract.outputs.version }} is available."
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Login to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
           build-args: |
             VERSION=${{ steps.extract.outputs.version }}
-          tags: |
-            ${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}:${{ steps.extract.outputs.version }}
-            ${{ env.DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}/{1}:{2}\n{0}/{1}:latest', env.DOCKERHUB_USER, env.IMAGE_NAME, steps.extract.outputs.version) || '' }}
