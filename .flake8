@@ -1,0 +1,11 @@
+[flake8]
+# WSL/DrvFs (Project files on /mnt/d) can be unstable with multi-process I/O.
+# Pinning to 1 job avoids many WSL hangs/crashes.
+jobs = 1
+
+# Exclude large directories to avoid excessive I/O that could trigger WSL bugs.
+exclude = .git,__pycache__,venv,.venv,node_modules,.pytest_cache,./venv,*/venv
+
+# Standard linting preferences
+max-line-length = 90
+extend-ignore = E203, W503
