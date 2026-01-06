@@ -8,7 +8,7 @@ on:
       dry_run:
         description: 'Dry Run (true/false)'
         required: true
-        default: true
+        default: false
         type: boolean
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
       KEEP_RECENT: '2'
       OLDER_THAN_DAYS: '15'
       PROTECTED_REGEX: '^(latest|stable|dev)$'
-      DRY_RUN: ${{ inputs.dry_run || 'true' }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
 
     steps:
       - name: Checkout repository
@@ -42,11 +42,11 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -e
-          
+
           echo "🚀 Starting synchronized cleanup for $NAMESPACE/$REPO"
           echo "🔹 KEEP_RECENT: $KEEP_RECENT"
           echo "🔹 DRY_RUN: $DRY_RUN"
-          
+
           # 1. Authenticate with Docker Hub
           TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${DOCKER_USERNAME}'", "password": "'${DOCKER_PASSWORD}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
           if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then echo "::error::Failed to authenticate"; exit 1; fi
@@ -57,12 +57,12 @@ jobs:
           # Note: uses git tag sort to handle version hierarchy correctly
           GIT_VERSION_TAGS=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
           VERSION_TAGS_TO_KEEP=$(echo "$GIT_VERSION_TAGS" | head -n "$KEEP_RECENT")
-          
+
           # 3. Get Version Info from Docker Hub
           echo "📊 Analyzing Docker Hub tags..."
           TAGS_JSON=$(curl -s -H "Authorization: JWT $TOKEN" "https://hub.docker.com/v2/repositories/$NAMESPACE/$REPO/tags/?page_size=100")
           DOCKER_TAGS=$(echo "$TAGS_JSON" | jq -r '.results[].name')
-          
+
           # 4. Consolidate list of all unique version tags (v*) from both systems
           ALL_VERSION_TAGS=$(printf "%s\n%s" "$(echo "$GIT_VERSION_TAGS")" "$(echo "$DOCKER_TAGS")" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -u || true)
 
@@ -73,13 +73,13 @@ jobs:
           for tag in $ALL_VERSION_TAGS; do
             ACTION="DELETE"
             REASON="Old version"
-            
+
             # Check if we should keep it
-            if echo "$VERSION_TAGS_TO_KEEP" | grep -qX "$tag"; then
+            if echo "$VERSION_TAGS_TO_KEEP" | grep -qx "$tag"; then
               ACTION="KEEP"
               REASON="Recent release"
             fi
-            
+
             # Check if it matches 'latest' or other protected tags (sanity check, though v* usually doesn't)
             if [[ "$tag" =~ $PROTECTED_REGEX ]]; then
               ACTION="KEEP"
@@ -93,7 +93,7 @@ jobs:
                 echo "   [DRY RUN] Would delete $tag from Docker Hub and Git"
               else
                 # Delete from Docker Hub
-                if echo "$DOCKER_TAGS" | grep -qX "$tag"; then
+                if echo "$DOCKER_TAGS" | grep -qx "$tag"; then
                   echo "   🗑️ Deleting Docker tag: $tag"
                   curl -s -X DELETE -H "Authorization: JWT $TOKEN" "https://hub.docker.com/v2/repositories/$NAMESPACE/$REPO/tags/$tag/" > /dev/null
                 fi
