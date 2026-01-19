@@ -87,21 +87,21 @@ define bump_version
 	MINOR=$$(echo $$CURRENT_VERSION | cut -d. -f2); \
 	PATCH=$$(echo $$CURRENT_VERSION | cut -d. -f3); \
 	if [ "$(1)" = "patch" ]; then \
-		NEW_MAJOR=$$MAJOR; \
-		NEW_MINOR=$$MINOR; \
 		NEW_PATCH=$$(expr $$PATCH + 1); \
+		NEW_VERSION=$$MAJOR.$$MINOR.$$NEW_PATCH; \
 	elif [ "$(1)" = "minor" ]; then \
-		NEW_MAJOR=$$MAJOR; \
 		NEW_MINOR=$$(expr $$MINOR + 1); \
-		NEW_PATCH=0; \
+		NEW_VERSION=$$MAJOR.$$NEW_MINOR.0; \
 	elif [ "$(1)" = "major" ]; then \
 		NEW_MAJOR=$$(expr $$MAJOR + 1); \
-		NEW_MINOR=0; \
-		NEW_PATCH=0; \
+		NEW_VERSION=$$NEW_MAJOR.0.0; \
 	fi; \
-	NEW_VERSION=$$NEW_MAJOR.$$NEW_MINOR.$$NEW_PATCH; \
 	NEW_TAG=v$$NEW_VERSION; \
-	echo "Incrementing version from $$LATEST_TAG to $$NEW_TAG"; \
-	git tag -a $$NEW_TAG -m "Bumped version to $$NEW_TAG"; \
-	git push origin $$NEW_TAG
+	BRANCH_NAME=release-bump-$$(date +%Y%m%d-%H%M%S); \
+	echo "Creating release branch and bumping version from $$LATEST_TAG to $$NEW_TAG"; \
+	git checkout -b $$BRANCH_NAME; \
+	git commit --allow-empty -m "chore: release $$NEW_TAG"; \
+	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
+	git push origin HEAD --follow-tags; \
+	gh pr create --fill --base main --title "chore: release $$NEW_TAG"
 endef
