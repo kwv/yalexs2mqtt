@@ -61,11 +61,17 @@ Enum values from yalexs-ble are serialized to their `.name` string via `_custom_
 
 ## Releasing
 
-Push a semver tag to trigger CI build and Docker Hub publish:
+Use `make bump-minor` (or `bump` / `bump-major`) to create a versioned release branch, tag, and PR to main:
 ```sh
-git tag v1.2.3
-git push origin v1.2.3
+make bump-minor   # v1.1.x → v1.2.0
 ```
+
+This creates a `release-bump-*` branch, pushes it with the tag, and opens a PR. Once the PR is merged, **push the tag separately** to trigger the CI release job:
+```sh
+git push origin v1.2.0
+```
+
+> **Important:** `make bump-minor` uses `git push --follow-tags`, which bundles the branch and tag in one push. GitHub does not reliably fire a separate tag-push event in that case, so the release workflow won't trigger automatically. Always push the tag as a separate step after merging.
 
 CI publishes `kwv4/yalexs2mqtt:v1.2.3` and `kwv4/yalexs2mqtt:latest` (multi-arch: `linux/amd64`, `linux/arm64`).
 
