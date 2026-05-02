@@ -10,9 +10,10 @@ import pytest
 sys.path.append(os.getcwd())
 
 # Mock config loading
-with patch("builtins.open", create=True) as mock_open, patch(
-    "json.load"
-) as mock_json_load:
+with (
+    patch("builtins.open", create=True) as mock_open,
+    patch("json.load") as mock_json_load,
+):
     mock_json_load.return_value = {
         "lock": {
             "serial": "ASDFGH1234",
@@ -134,7 +135,11 @@ async def test_run_loop_lock_command(bridge, mock_push_lock, mock_scanner):
             # Break the loop
             raise Exception("Break Loop")
 
-    with patch("asyncio.wait", side_effect=side_effect_wait), patch("sys.exit"):
+    with (
+        patch("asyncio.wait", side_effect=side_effect_wait),
+        patch("sys.exit"),
+        patch("yalexs2mqtt.run_http_server"),
+    ):
         try:
             await bridge.run()
         except Exception as e:
@@ -149,9 +154,11 @@ async def test_disconnected_error_handling(bridge, mock_push_lock, mock_scanner)
     # Simulate DisconnectedError
     mock_push_lock.start.side_effect = DisconnectedError("Disconnected")
 
-    with patch("sys.exit") as mock_exit, patch(
-        "yalexs2mqtt._LOGGER.critical"
-    ) as mock_log:
+    with (
+        patch("sys.exit") as mock_exit,
+        patch("yalexs2mqtt._LOGGER.critical") as mock_log,
+        patch("yalexs2mqtt.run_http_server"),
+    ):
         await bridge.run()
 
         mock_log.assert_called_with(

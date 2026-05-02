@@ -167,6 +167,13 @@ class Yalexs2MqttBridge:
     async def run(self) -> None:
         await self.setup_mqtt()
 
+        http_thread = threading.Thread(
+            target=run_http_server,
+            args=(lambda: self.push_lock is not None and self.push_lock.is_connected,),
+            daemon=True,
+        )
+        http_thread.start()
+
         self.push_lock = PushLock(
             local_name=self.lock_config.serial,
             address=self.lock_config.address,
@@ -190,10 +197,6 @@ class Yalexs2MqttBridge:
                 "Connected - Keys are good: %s",
                 self.push_lock.is_connected,
             )
-            # Start HTTP server in a separate thread
-            http_thread = threading.Thread(target=run_http_server)
-            http_thread.daemon = True  # So it exits when the main thread exits
-            http_thread.start()
             while True:
                 done, pending = await asyncio.wait(
                     [asyncio.create_task(self.mqtt_command_event.wait())],
@@ -230,22 +233,27 @@ class Yalexs2MqttBridge:
             _LOGGER.info("Cleanly exited.")
 
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "healthy"}).encode("utf-8"))
-        else:
-            self.send_response(404)
-            self.end_headers()
+def run_http_server(is_healthy):
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/health":
+                healthy = is_healthy()
+                self.send_response(200 if healthy else 503)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                body = "healthy" if healthy else "unhealthy"
+                self.wfile.write(json.dumps({"status": body}).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
 
+        def log_message(self, format, *args):
+            pass
 
-def run_http_server():
-    server_address = ("", 8080)
-    httpd = HTTPServer(server_address, HealthCheckHandler)
-    httpd.serve_forever()
+    try:
+        HTTPServer(("", 8080), HealthCheckHandler).serve_forever()
+    except OSError as e:
+        _LOGGER.error(f"Health check server failed to start: {e}")
 
 
 if __name__ == "__main__":
