@@ -122,7 +122,10 @@ class Yalexs2MqttBridge:
         try:
             _LOGGER.info(f"New MQTT message received: {message.payload.decode()}")
             self.mqtt_message = message.payload.decode("utf-8")
-            self._loop.call_soon_threadsafe(self.mqtt_command_event.set)
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self.mqtt_command_event.set)
+            else:
+                self.mqtt_command_event.set()
         except Exception as e:
             _LOGGER.error(f"Error processing MQTT message: {e}")
 
