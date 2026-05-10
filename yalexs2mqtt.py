@@ -63,6 +63,8 @@ class Yalexs2MqttBridge:
         self.mqtt_message: Optional[str] = None
         self.push_lock: Optional[PushLock] = None
         self.scanner: Optional[BleakScanner] = None
+        self.initialized = False
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def _load_config(self, path: str) -> Dict[str, Any]:
         try:
@@ -120,7 +122,7 @@ class Yalexs2MqttBridge:
         try:
             _LOGGER.info(f"New MQTT message received: {message.payload.decode()}")
             self.mqtt_message = message.payload.decode("utf-8")
-            self.mqtt_command_event.set()
+            self._loop.call_soon_threadsafe(self.mqtt_command_event.set)
         except Exception as e:
             _LOGGER.error(f"Error processing MQTT message: {e}")
 
@@ -151,6 +153,7 @@ class Yalexs2MqttBridge:
     def _new_state_callback(
         self, new_state: LockState, lock_info: LockInfo, connection_info: ConnectionInfo
     ) -> None:
+        self.initialized = True
         state_json = json.dumps(new_state, default=self._custom_asdict_factory)
         connection_json = json.dumps(
             connection_info, default=self._custom_asdict_factory
@@ -165,11 +168,12 @@ class Yalexs2MqttBridge:
         self.on_status_update(merged_json)
 
     async def run(self) -> None:
+        self._loop = asyncio.get_running_loop()
         await self.setup_mqtt()
 
         http_thread = threading.Thread(
             target=run_http_server,
-            args=(lambda: self.push_lock is not None and self.push_lock.is_connected,),
+            args=(lambda: self.initialized,),
             daemon=True,
         )
         http_thread.start()
@@ -250,10 +254,13 @@ def run_http_server(is_healthy):
         def log_message(self, format, *args):
             pass
 
+    class ReusableHTTPServer(HTTPServer):
+        allow_reuse_address = True
+
     try:
-        HTTPServer(("", 8080), HealthCheckHandler).serve_forever()
-    except OSError as e:
-        _LOGGER.error(f"Health check server failed to start: {e}")
+        ReusableHTTPServer(("", 8080), HealthCheckHandler).serve_forever()
+    except Exception as e:
+        _LOGGER.error(f"Health check server failed: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
