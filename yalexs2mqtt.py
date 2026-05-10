@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import sys
 import threading
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ LOCK_KEY_INDEX_KEY = "handshakeKeyIndex"
 MQTT_USER_KEY = "mqtt_user"
 MQTT_PASSWORD_KEY = "mqtt_password"
 MQTT_BROKER_ADDRESS_KEY = "broker_address"
+
+VERSION = os.environ.get("APP_VERSION", "unknown")
 
 # Set up logging
 _LOGGER = logging.getLogger(__name__)
@@ -171,6 +174,7 @@ class Yalexs2MqttBridge:
         self.on_status_update(merged_json)
 
     async def run(self) -> None:
+        _LOGGER.info("yalexs2mqtt version %s starting", VERSION)
         self._loop = asyncio.get_running_loop()
         await self.setup_mqtt()
 
