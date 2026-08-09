@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,33 +30,32 @@ with (
     from yalexs2mqtt import DisconnectedError, Yalexs2MqttBridge
 
 
+# These stand-ins use autospec=True so they are built from the *installed*
+# library rather than accepting anything. Because requirements.txt is unpinned,
+# CI installs the newest yalexs-ble/paho-mqtt on every run, so a rename or
+# signature change upstream fails these tests instead of shipping a broken
+# image to `latest`. Async methods are detected automatically, so there is no
+# need to hand-assign AsyncMock.
 @pytest.fixture
 def mock_client():
-    with patch("yalexs2mqtt.mqtt.Client") as mock:
+    with patch("yalexs2mqtt.mqtt.Client", autospec=True) as mock:
         yield mock.return_value
 
 
 @pytest.fixture
 def mock_push_lock():
-    with patch("yalexs2mqtt.PushLock") as mock:
+    with patch("yalexs2mqtt.PushLock", autospec=True) as mock:
         instance = mock.return_value
-        instance.start = AsyncMock()
-        instance.stop = AsyncMock()
-        instance.lock = AsyncMock()
-        instance.unlock = AsyncMock()
-        instance.update = AsyncMock()
-        instance.wait_for_first_update = AsyncMock()
-        instance.register_callback = MagicMock()
+        # start() returns a plain sync cancel callable -- Callable[[], None] --
+        # which autospec cannot infer from the return annotation.
+        instance.start.return_value = MagicMock()
         yield instance
 
 
 @pytest.fixture
 def mock_scanner():
-    with patch("yalexs2mqtt.BleakScanner") as mock:
-        instance = mock.return_value
-        instance.start = AsyncMock()
-        instance.stop = AsyncMock()
-        yield instance
+    with patch("yalexs2mqtt.BleakScanner", autospec=True) as mock:
+        yield mock.return_value
 
 
 @pytest.fixture
@@ -117,8 +116,17 @@ def test_new_state_publishing(bridge):
 
 
 @pytest.mark.asyncio
-async def test_run_loop_lock_command(bridge, mock_push_lock, mock_scanner):
-    # Simulate a LOCK command coming from MQTT
+@pytest.mark.parametrize(
+    "command, expected, not_expected",
+    [
+        ("LOCK", "lock", "unlock"),
+        ("UNLOCK", "unlock", "lock"),
+    ],
+)
+async def test_run_loop_command(
+    bridge, mock_push_lock, mock_scanner, command, expected, not_expected
+):
+    # Simulate a LOCK/UNLOCK command coming from MQTT
     original_wait = asyncio.wait
 
     call_count = 0
@@ -128,7 +136,7 @@ async def test_run_loop_lock_command(bridge, mock_push_lock, mock_scanner):
         call_count += 1
         if call_count == 1:
             # First wait, let's set the event
-            bridge.mqtt_message = "LOCK"
+            bridge.mqtt_message = command
             bridge.mqtt_command_event.set()
             return await original_wait(*args, **kwargs)
         else:
@@ -146,7 +154,9 @@ async def test_run_loop_lock_command(bridge, mock_push_lock, mock_scanner):
             if str(e) != "Break Loop":
                 raise e
 
-    mock_push_lock.lock.assert_awaited_once()
+    getattr(mock_push_lock, expected).assert_awaited_once()
+    # A command must never trigger the opposite action on the lock.
+    getattr(mock_push_lock, not_expected).assert_not_awaited()
 
 
 @pytest.mark.asyncio
