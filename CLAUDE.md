@@ -73,6 +73,8 @@ git push origin v1.2.0
 
 > **Important:** `make bump-minor` uses `git push --follow-tags`, which bundles the branch and tag in one push. GitHub does not reliably fire a separate tag-push event in that case, so the release workflow won't trigger automatically. Always push the tag as a separate step after merging.
 
+Dependency updates release themselves: `requirements.txt` is pinned, Dependabot opens one grouped pip PR per week, and merging it runs `auto-release.yml`, which tags the next patch version and starts the release build via `gh workflow run`.
+
 CI publishes `kwv4/yalexs2mqtt:v1.2.3` and `kwv4/yalexs2mqtt:latest` (multi-arch: `linux/amd64`, `linux/arm64`).
 
 Required GitHub secrets: `DOCKERHUB_USER`, `DOCKERHUB_TOKEN`.
