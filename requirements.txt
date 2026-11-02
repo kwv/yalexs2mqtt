@@ -1,2 +1,2 @@
-yalexs-ble
-paho-mqtt
+yalexs-ble==10.0.0
+paho-mqtt==2.1.0

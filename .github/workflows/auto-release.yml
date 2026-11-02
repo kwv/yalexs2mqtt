@@ -1,5 +1,10 @@
 name: Auto Release on Dependabot Merge
 
+# When a Dependabot pip or docker PR is merged, tag the merge commit with the
+# next patch version and start the release build for that tag.
+# Pushes made with GITHUB_TOKEN don't trigger other workflows, so the build is
+# started explicitly with `gh workflow run` (workflow_dispatch is exempt).
+
 on:
   pull_request:
     types:
@@ -9,22 +14,40 @@ on:
 
 permissions:
   contents: write
+  actions: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
 
 jobs:
   auto-release:
-    if: github.event.pull_request.merged == true && startsWith(github.head_ref, 'dependabot/')
+    if: >-
+      github.event.pull_request.merged == true &&
+      (startsWith(github.head_ref, 'dependabot/pip/') ||
+       startsWith(github.head_ref, 'dependabot/docker/'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
-      - name: Configure Git
+      - name: Tag next patch version
+        id: tag
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          latest="$(git tag -l 'v*' | sort -V | tail -n1)"
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          new="v${major}.${minor}.$((patch + 1))"
+          echo "Tagging ${new} (previous ${latest})"
+          git tag -a "$new" -m "Release ${new}: ${{ github.event.pull_request.title }}"
+          git push origin "$new"
+          echo "tag=${new}" >> "$GITHUB_OUTPUT"
 
-      - name: Bump version and push tag
-        run: |
-            make bump
+      - name: Start release build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build-test-publish.yml --ref "${{ steps.tag.outputs.tag }}"

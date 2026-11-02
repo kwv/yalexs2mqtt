@@ -14,7 +14,11 @@ import paho.mqtt.client as mqtt
 from bleak import BleakScanner
 from yalexs_ble import LockState, PushLock
 from yalexs_ble.const import ConnectionInfo, LockInfo
-from yalexs_ble.session import DisconnectedError
+from yalexs_ble.session import (
+    DisconnectedError,
+    OperationFailedError,
+    OperationIncompleteError,
+)
 
 # Constants for configuration keys
 CONFIG_LOCK = "lock"
@@ -173,6 +177,25 @@ class Yalexs2MqttBridge:
         )
         self.on_status_update(merged_json)
 
+    async def _run_command(self, command: Optional[str]) -> None:
+        """Send one MQTT command (LOCK, UNLOCK, UPDATE) to the lock.
+
+        A failed or unconfirmed operation (e.g. a jam) is logged and the
+        bridge keeps running; the lock's resulting state is still published
+        through the state callback.
+        """
+        try:
+            if command == "LOCK":
+                await self.push_lock.lock()
+            elif command == "UNLOCK":
+                await self.push_lock.unlock()
+            elif command == "UPDATE":
+                await self.push_lock.update()
+            else:
+                _LOGGER.error(f"Unknown command: {command}")
+        except (OperationFailedError, OperationIncompleteError) as e:
+            _LOGGER.error(f"{command} command failed: {e}")
+
     async def run(self) -> None:
         _LOGGER.info("yalexs2mqtt version %s starting", VERSION)
         self._loop = asyncio.get_running_loop()
@@ -215,16 +238,11 @@ class Yalexs2MqttBridge:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if self.mqtt_command_event.is_set():
-                    if self.mqtt_message == "LOCK":
-                        await self.push_lock.lock()
-                    elif self.mqtt_message == "UNLOCK":
-                        await self.push_lock.unlock()
-                    elif self.mqtt_message == "UPDATE":
-                        await self.push_lock.update()
-                    else:
-                        _LOGGER.error(f"Unknown command: {self.mqtt_message}")
-                    self.mqtt_message = None
-                    self.mqtt_command_event.clear()
+                    try:
+                        await self._run_command(self.mqtt_message)
+                    finally:
+                        self.mqtt_message = None
+                        self.mqtt_command_event.clear()
 
         except DisconnectedError as e:
             _LOGGER.critical(

@@ -5,6 +5,8 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from yalexs_ble.const import OperationError
+from yalexs_ble.session import OperationFailedError, OperationIncompleteError
 
 # Add current directory to sys.path
 sys.path.append(os.getcwd())
@@ -176,3 +178,43 @@ async def test_disconnected_error_handling(bridge, mock_push_lock, mock_scanner)
             "Disconnected. Check your handshakeKey and handshakeKeyIndex in config.json."
         )
         mock_exit.assert_called_with(1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        OperationFailedError("lock", OperationError.MECH_TIMEOUT),
+        OperationIncompleteError("lock"),
+    ],
+)
+async def test_failed_operation_keeps_bridge_running(
+    bridge, mock_push_lock, mock_scanner, error
+):
+    # A lock that reports a failure (e.g. jammed) must not take the bridge
+    # down; the next command is still handled.
+    mock_push_lock.lock.side_effect = error
+    commands = iter(["LOCK", "UNLOCK"])
+    original_wait = asyncio.wait
+
+    async def side_effect_wait(*args, **kwargs):
+        try:
+            bridge.mqtt_message = next(commands)
+        except StopIteration:
+            raise Exception("Break Loop")
+        bridge.mqtt_command_event.set()
+        return await original_wait(*args, **kwargs)
+
+    with (
+        patch("asyncio.wait", side_effect=side_effect_wait),
+        patch("sys.exit") as mock_exit,
+        patch("yalexs2mqtt.run_http_server"),
+        patch("yalexs2mqtt._LOGGER.error") as mock_log,
+    ):
+        await bridge.run()
+
+    mock_push_lock.lock.assert_awaited_once()
+    mock_push_lock.unlock.assert_awaited_once()
+    mock_log.assert_any_call(f"LOCK command failed: {error}")
+    # Only the loop-breaking exception reaches the fatal handler.
+    assert mock_exit.call_count == 1

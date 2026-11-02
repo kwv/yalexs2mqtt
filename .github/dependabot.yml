@@ -1,10 +1,22 @@
 version: 2
 updates:
+  # requirements.txt is pinned; each weekly run bundles every pip bump into
+  # one PR. Merging it triggers auto-release.yml.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      pip:
+        patterns: ["*"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
