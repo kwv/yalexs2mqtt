@@ -1,0 +1,52 @@
+name: Failure Alert
+
+# Opens an issue assigned to the repo owner when unattended automation fails:
+# a Dependabot PR that fails its tests (so it won't auto-merge), the auto-merge
+# or release itself, or the weekly rebuild. Failures on your own PRs are not
+# reported; you are already looking at those. One open issue per workflow and
+# branch; a repeat failure comments on it instead.
+
+on:
+  workflow_run:
+    workflows:
+      - "Build, Test, and Publish"
+      - "Dependabot Auto-merge"
+      - "Auto Release on Dependabot Merge"
+      - "Docker Hub Cleanup"
+    types: [completed]
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    if: >-
+      contains(fromJSON('["failure", "timed_out", "startup_failure"]'),
+               github.event.workflow_run.conclusion) &&
+      (github.event.workflow_run.event != 'pull_request' ||
+       github.event.workflow_run.actor.login == 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update the alert issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          title="${WORKFLOW} failed on ${BRANCH}"
+          body="[Failed run](${RUN_URL}) (${EVENT})."
+          if [ -n "$PR" ]; then
+            body="${body} Dependabot PR #${PR} was not merged; it needs a look."
+          fi
+          existing="$(gh issue list --state open --search "in:title \"${title}\"" \
+            --json number,title -q ".[] | select(.title == \"${title}\") | .number" | head -n1)"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Failed again: ${body}"
+          else
+            gh issue create --title "$title" --body "$body" --assignee "$OWNER"
+          fi
