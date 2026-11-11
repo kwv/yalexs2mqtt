@@ -1,0 +1,62 @@
+name: Dependabot Auto-merge
+
+# Merges a Dependabot PR once validate (tests, also run inside the built
+# image) has passed on its latest commit. pip and docker merges are then
+# released through auto-release.yml; github-actions merges are not released.
+# The image reaches a deployment only when that deployment pulls :latest.
+
+on:
+  workflow_run:
+    workflows: ["Build, Test, and Publish"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: dependabot-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.merge.outputs.sha }}
+      title: ${{ steps.merge.outputs.title }}
+      release: ${{ steps.merge.outputs.release }}
+    steps:
+      - name: Merge the tested commit
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr="$(gh pr list --head "$BRANCH" --state open --json number,author \
+            -q '.[] | select(.author.login == "app/dependabot") | .number')"
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot PR for $BRANCH"; exit 0
+          fi
+          # Refuses if the branch moved after this test run.
+          gh pr merge "$pr" --merge --delete-branch --match-head-commit "$HEAD_SHA"
+          echo "sha=$(gh pr view "$pr" --json mergeCommit -q .mergeCommit.oid)" >> "$GITHUB_OUTPUT"
+          echo "title=$(gh pr view "$pr" --json title -q .title)" >> "$GITHUB_OUTPUT"
+          case "$BRANCH" in
+            dependabot/pip/*|dependabot/docker/*) echo "release=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  release:
+    needs: merge
+    if: needs.merge.outputs.release == 'true'
+    uses: ./.github/workflows/auto-release.yml
+    with:
+      sha: ${{ needs.merge.outputs.sha }}
+      title: ${{ needs.merge.outputs.title }}
