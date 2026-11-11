@@ -4,6 +4,10 @@ name: Auto Release on Dependabot Merge
 # next patch version and start the release build for that tag.
 # Pushes made with GITHUB_TOKEN don't trigger other workflows, so the build is
 # started explicitly with `gh workflow run` (workflow_dispatch is exempt).
+#
+# A hand merge triggers this via pull_request. dependabot-automerge.yml merges
+# with GITHUB_TOKEN, which fires no pull_request event, so it calls this
+# workflow directly with the merge commit and PR title.
 
 on:
   pull_request:
@@ -11,6 +15,16 @@ on:
       - closed
     branches:
       - main
+  workflow_call:
+    inputs:
+      sha:
+        description: merge commit to tag
+        required: true
+        type: string
+      title:
+        description: PR title, for the tag message
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,19 +37,22 @@ concurrency:
 jobs:
   auto-release:
     if: >-
-      github.event.pull_request.merged == true &&
-      (startsWith(github.head_ref, 'dependabot/pip/') ||
-       startsWith(github.head_ref, 'dependabot/docker/'))
+      inputs.sha != '' ||
+      (github.event.pull_request.merged == true &&
+       (startsWith(github.head_ref, 'dependabot/pip/') ||
+        startsWith(github.head_ref, 'dependabot/docker/')))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ inputs.sha || github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
       - name: Tag next patch version
         id: tag
+        env:
+          TITLE: ${{ inputs.title || github.event.pull_request.title }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -43,7 +60,7 @@ jobs:
           IFS=. read -r major minor patch <<< "${latest#v}"
           new="v${major}.${minor}.$((patch + 1))"
           echo "Tagging ${new} (previous ${latest})"
-          git tag -a "$new" -m "Release ${new}: ${{ github.event.pull_request.title }}"
+          git tag -a "$new" -m "Release ${new}: ${TITLE}"
           git push origin "$new"
           echo "tag=${new}" >> "$GITHUB_OUTPUT"
 

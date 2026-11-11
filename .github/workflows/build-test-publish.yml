@@ -47,6 +47,17 @@ jobs:
       - name: Run tests
         run: ./venv/bin/pytest
 
+      # Run the suite inside the built image too: the base image tag floats
+      # (python:3-alpine), so this is the only run on the Python it ships.
+      - name: Build image for tests
+        run: docker build -t yalexs2mqtt:ci .
+
+      - name: Run tests in image
+        run: |
+          docker run --rm --user root -v "$PWD/tests:/app/tests:ro" \
+            --entrypoint sh yalexs2mqtt:ci -c \
+            "/venv/bin/pip install -q pytest pytest-asyncio && /venv/bin/python -m pytest -q -p no:cacheprovider tests"
+
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -76,6 +87,17 @@ jobs:
 
       - name: Run tests
         run: ./venv/bin/pytest
+
+      # Run the suite inside the built image too: the base image tag floats
+      # (python:3-alpine), so this is the only run on the Python it ships.
+      - name: Build image for tests
+        run: docker build -t yalexs2mqtt:ci .
+
+      - name: Run tests in image
+        run: |
+          docker run --rm --user root -v "$PWD/tests:/app/tests:ro" \
+            --entrypoint sh yalexs2mqtt:ci -c \
+            "/venv/bin/pip install -q pytest pytest-asyncio && /venv/bin/python -m pytest -q -p no:cacheprovider tests"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
